@@ -94,7 +94,85 @@ else if (lookup.status === 404)
     }),
   });
 else throw new Error("GitHub release lookup status " + lookup.status);
-for (const file of [installer, "release/SHA256SUMS.txt"]) {
+if (process.argv.includes("--draft-failed")) {
+  for (const asset of release.assets || []) {
+    if (
+      asset.state === "starter" &&
+      (asset.name === installer.split("/").at(-1) ||
+        /^DaidarFlowPilot-0\.1\.0\.exe\.part[0-9]+$/.test(asset.name))
+    )
+      await api(
+        "https://api.github.com/repos/" + repo + "/releases/assets/" + asset.id,
+        { method: "DELETE" },
+      );
+  }
+  const updated = await api(
+    "https://api.github.com/repos/" + repo + "/releases/" + release.id,
+    {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        draft: true,
+        body:
+          release.body +
+          "\n\nتعذر رفع المثبت بسبب HTTP408 حتى مع التجزئة. بقيت هذه المسودة للمراجعة؛ المثبت الكامل وبصمةSHA256 متوفران في بيئة التطوير المحلية.",
+      }),
+    },
+  );
+  console.log(
+    JSON.stringify({
+      release: updated.html_url,
+      draft: updated.draft,
+      upload: "HTTP408",
+    }),
+  );
+  process.exit(0);
+}
+let assets = [installer, "release/SHA256SUMS.txt"];
+if (process.argv.includes("--parts")) {
+  const data = await readFile(installer);
+  const names = [];
+  for (
+    let offset = 0, index = 1;
+    offset < data.length;
+    offset += 25 * 1024 * 1024, index++
+  ) {
+    const name =
+      "DaidarFlowPilot-0.1.0.exe.part" + String(index).padStart(3, "0");
+    await writeFile(
+      "release/" + name,
+      data.subarray(offset, Math.min(data.length, offset + 25 * 1024 * 1024)),
+    );
+    names.push(name);
+  }
+  const assemble = [
+    "$ErrorActionPreference='Stop'",
+    "$taskOutput=Join-Path $PSScriptRoot 'Daidar Flow Pilot Setup 0.1.0.exe'",
+    "$taskParts=@(" + names.map((n) => "'" + n + "'").join(",") + ")",
+    "foreach($taskName in $taskParts){if(-not(Test-Path -LiteralPath (Join-Path $PSScriptRoot $taskName))){throw ('Missing '+$taskName)}}",
+    "$taskStream=[System.IO.File]::Open($taskOutput,[System.IO.FileMode]::CreateNew)",
+    "try{foreach($taskName in $taskParts){$taskInput=[System.IO.File]::OpenRead((Join-Path $PSScriptRoot $taskName));try{$taskInput.CopyTo($taskStream)}finally{$taskInput.Dispose()}}}finally{$taskStream.Dispose()}",
+    "if((Get-FileHash -LiteralPath $taskOutput -Algorithm SHA256).Hash.ToLowerInvariant() -ne '" +
+      digest +
+      "'){throw 'SHA256 mismatch. Do not run this file.'}",
+    "Write-Output ('Verified installer: '+$taskOutput)",
+  ].join("\r\n");
+  await writeFile("release/Assemble-installer.ps1", assemble);
+  const failed = release.assets?.find(
+    (a) => a.name === installer.split("/").at(-1) && a.state === "starter",
+  );
+  if (failed)
+    await api(
+      "https://api.github.com/repos/" + repo + "/releases/assets/" + failed.id,
+      { method: "DELETE" },
+    );
+  assets = [
+    ...names.map((n) => "release/" + n),
+    "release/Assemble-installer.ps1",
+    "release/SHA256SUMS.txt",
+  ];
+}
+for (const file of assets) {
   const name = file.split("/").at(-1);
   const existing = release.assets?.find((a) => a.name === name);
   if (existing && existing.state === "starter") {
@@ -107,7 +185,7 @@ for (const file of [installer, "release/SHA256SUMS.txt"]) {
     );
   }
   if (existing && existing.state !== "starter") {
-    if (name.endsWith(".exe") && existing.size !== size)
+    if (existing.size !== (await stat(file)).size)
       throw new Error("Existing release asset has different size");
     continue;
   }
@@ -124,6 +202,20 @@ for (const file of [installer, "release/SHA256SUMS.txt"]) {
     body: await readFile(file),
     duplex: "half",
   });
+}
+if (process.argv.includes("--parts")) {
+  await api(
+    "https://api.github.com/repos/" + repo + "/releases/" + release.id,
+    {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        body:
+          release.body +
+          "\n\nتنزيل المثبت: تعذر رفع الملف الكبير كاملًا بسبب مهلة408. نزّل ملفاتpart001 إلىpart004 وAssemble-installer.ps1 في مجلد واحد، ثم شغّل السكربت لتجميع المثبت والتحقق منSHA256. لا يفتح السكربت المثبت تلقائيًا. المثبت غير موقّع وغير جاهز للبيع.",
+      }),
+    },
+  );
 }
 console.log(
   JSON.stringify({
