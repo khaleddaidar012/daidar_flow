@@ -1,0 +1,14 @@
+[
+  {
+    "name": "مثال صيغة فقط — لا يتم تحميله تلقائيًا",
+    "barcode": "EXAMPLE-001",
+    "category": "عام",
+    "baseUnit": "قطعة",
+    "packName": "كرتونة",
+    "packFactor": 12000,
+    "retail": 2000,
+    "wholesale": 1800,
+    "purchase": 1000,
+    "reorder": 2000
+  }
+]

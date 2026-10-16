@@ -1,0 +1,23 @@
+export const schema = `
+CREATE TABLE scopes (business_id TEXT NOT NULL,branch_id TEXT NOT NULL,warehouse_id TEXT NOT NULL,device_id TEXT NOT NULL);
+INSERT INTO scopes VALUES ('local','main','main','main');
+CREATE TABLE settings (key TEXT PRIMARY KEY,value TEXT NOT NULL);
+CREATE TABLE users (id TEXT PRIMARY KEY,username TEXT NOT NULL UNIQUE COLLATE NOCASE,hash TEXT NOT NULL,role TEXT NOT NULL CHECK(role IN ('manager','cashier','stock')),must_change INTEGER NOT NULL DEFAULT 0,attempts INTEGER NOT NULL DEFAULT 0,locked_until INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE products (id TEXT PRIMARY KEY,name TEXT NOT NULL,barcode TEXT NOT NULL UNIQUE,category TEXT NOT NULL,base_unit TEXT NOT NULL,pack_name TEXT NOT NULL,pack_factor INTEGER NOT NULL CHECK(pack_factor>0),retail INTEGER NOT NULL CHECK(retail>=0),wholesale INTEGER NOT NULL CHECK(wholesale>=0),purchase INTEGER NOT NULL CHECK(purchase>=0),reorder INTEGER NOT NULL CHECK(reorder>=0),quantity INTEGER NOT NULL DEFAULT 0 CHECK(quantity>=0),value INTEGER NOT NULL DEFAULT 0 CHECK(value>=0));
+CREATE TABLE parties (id TEXT PRIMARY KEY,name TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('customer','supplier')),opening INTEGER NOT NULL,credit_limit INTEGER NOT NULL CHECK(credit_limit>=0),reason TEXT NOT NULL);
+CREATE TABLE shifts (id TEXT PRIMARY KEY,actor TEXT NOT NULL REFERENCES users(id),opened TEXT NOT NULL,closed TEXT,float INTEGER NOT NULL,expected INTEGER,actual INTEGER,difference INTEGER,reason TEXT);
+CREATE UNIQUE INDEX one_open_shift ON shifts((1)) WHERE closed IS NULL;
+CREATE TABLE documents (id TEXT PRIMARY KEY,kind TEXT NOT NULL CHECK(kind IN ('sale','purchase','sale-return','purchase-return')),parent TEXT REFERENCES documents(id),actor TEXT NOT NULL REFERENCES users(id),party TEXT REFERENCES parties(id),shift TEXT REFERENCES shifts(id),created TEXT NOT NULL,total INTEGER NOT NULL,cost INTEGER NOT NULL,discount INTEGER NOT NULL DEFAULT 0,reason TEXT);
+CREATE TABLE lines (id TEXT PRIMARY KEY,document TEXT NOT NULL REFERENCES documents(id),product TEXT NOT NULL REFERENCES products(id),quantity INTEGER NOT NULL CHECK(quantity>0),price INTEGER NOT NULL,net INTEGER NOT NULL,cost INTEGER NOT NULL,original TEXT REFERENCES lines(id));
+CREATE TABLE movements (id TEXT PRIMARY KEY,product TEXT NOT NULL REFERENCES products(id),document TEXT REFERENCES documents(id),actor TEXT NOT NULL REFERENCES users(id),created TEXT NOT NULL,quantity INTEGER NOT NULL,value INTEGER NOT NULL,reason TEXT NOT NULL);
+CREATE TABLE payments (id TEXT PRIMARY KEY,document TEXT REFERENCES documents(id),party TEXT REFERENCES parties(id),shift TEXT REFERENCES shifts(id),created TEXT NOT NULL,method TEXT NOT NULL CHECK(method IN ('cash','card','other')),amount INTEGER NOT NULL,reason TEXT);
+CREATE TABLE cash_events (id TEXT PRIMARY KEY,shift TEXT NOT NULL REFERENCES shifts(id),actor TEXT NOT NULL REFERENCES users(id),created TEXT NOT NULL,kind TEXT NOT NULL,amount INTEGER NOT NULL,reason TEXT NOT NULL);
+CREATE TABLE audit (id TEXT PRIMARY KEY,actor TEXT,created TEXT NOT NULL,action TEXT NOT NULL,subject TEXT NOT NULL);
+CREATE TABLE operations (id TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,result TEXT NOT NULL);
+CREATE TABLE holds (id TEXT PRIMARY KEY,actor TEXT NOT NULL REFERENCES users(id),label TEXT NOT NULL,cart TEXT NOT NULL);
+CREATE TRIGGER documents_no_update BEFORE UPDATE ON documents BEGIN SELECT RAISE(ABORT,'immutable document'); END;
+CREATE TRIGGER documents_no_delete BEFORE DELETE ON documents BEGIN SELECT RAISE(ABORT,'immutable document'); END;
+CREATE TRIGGER lines_no_update BEFORE UPDATE ON lines BEGIN SELECT RAISE(ABORT,'immutable line'); END;
+CREATE TRIGGER lines_no_delete BEFORE DELETE ON lines BEGIN SELECT RAISE(ABORT,'immutable line'); END;
+PRAGMA user_version=1;
+`;

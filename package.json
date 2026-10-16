@@ -1,0 +1,72 @@
+{
+  "name": "daidar-flow",
+  "productName": "Daidar Flow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Daidar Flow local general-store desktop pilot",
+  "author": "Daidar",
+  "license": "UNLICENSED",
+  "main": "dist/desktop/main.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/test.mjs",
+    "start": "npm run build && electron .",
+    "dev:hub": "node scripts/hub.mjs",
+    "package:win": "npm run build && electron-builder --win nsis",
+    "licenses": "node scripts/licenses.mjs",
+    "package:pilot": "node scripts/package-pilot.mjs",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css,html}\" \"tests/**/*.{ts,cjs}\" \"scripts/*.mjs\" \"dev/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,css,html}\" \"tests/**/*.{ts,cjs}\" \"scripts/*.mjs\" \"dev/*.ts\""
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "electron": "^42.0.0",
+    "electron-builder": "26.15.3",
+    "esbuild": "^0.25.0",
+    "prettier": "3.9.10",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  },
+  "build": {
+    "appId": "com.daidar.flow",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "public/**/*",
+      "docs/THIRD-PARTY-NOTICES.md",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "public/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": null
+  },
+  "overrides": {
+    "global-agent": "4.1.3"
+  }
+}

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+release/
+.env
+.env.local
+.data/
+*.sqlite*
+*.db
+*.log
+dev/keys/
+test-results/

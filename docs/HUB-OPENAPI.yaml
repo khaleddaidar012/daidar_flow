@@ -1,0 +1,133 @@
+openapi: 3.1.0
+info:
+  title: Daidar Hub / Flow proposed contract
+  version: 0.1.0
+  description: Proposed contract; no production Hub was available. Implement authorization, approved subscriptions, device binding, replay protection and secure server key custody before launch.
+servers:
+  - url: https://hub.example.invalid
+    description: Documentation only. Replace with the actual approved Hub origin; never shown in the app.
+paths:
+  /v1/device/authorize:
+    post:
+      summary: Create expiring device authorization request (no owner password in app)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [product, installation_id]
+              properties:
+                product: { const: daidar-flow }
+                installation_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Device code must be high entropy, expire after 10 minutes, and be consumed once. Verification page requires owner login and consent.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [device_code, verification_uri_complete, interval, expires_in]
+                properties:
+                  device_code: { type: string }
+                  verification_uri_complete: { type: string, format: uri }
+                  interval: { type: integer, minimum: 1 }
+                  expires_in: { type: integer }
+        '403': { description: Subscription unapproved or another device bound }
+  /v1/device/token:
+    post:
+      summary: Poll approval (rate limited)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_code, installation_id]
+              properties:
+                device_code: { type: string }
+                installation_id: { type: string, format: uuid }
+      responses:
+        '200':
+          description: pending or approved with license; approved response consumes the code
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { enum: [pending, approved] }
+                  license: { $ref: '#/components/schemas/Envelope' }
+        '400': { description: expired, consumed or invalid code }
+        '429': { description: Back off and respect retry-after }
+  /v1/license/refresh:
+    post:
+      summary: Obtain newer license after Hub renewal approval
+      description: Current connector submits existing signed envelope as binding proof. Production must add an OS-protected device credential or challenge proof; a copied signed license alone is insufficient device authentication.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [installation_id, license]
+              properties:
+                installation_id: { type: string, format: uuid }
+                license: { $ref: '#/components/schemas/Envelope' }
+      responses:
+        '200':
+          description: Signed replacement, with strictly increasing version if claims change
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Envelope' }
+        '403': { description: Approval or valid device credential required }
+  /v1/subscriptions/current:
+    get:
+      summary: Subscription, plan prices, allowed modules and status (planned)
+      security: [{ deviceCredential: [] }]
+      responses:
+        '200': { description: Hub sourced EGP plan price, cadence, approval and entitlement status }
+  /v1/devices/transfer-requests:
+    post:
+      summary: Owner requests device transfer (planned)
+      security: [{ ownerSession: [] }]
+      responses:
+        '202': { description: Admin approves revocation and new binding, coordinates offline lease deadline }
+  /v1/app/releases:
+    get:
+      summary: Signed release metadata (planned)
+      responses:
+        '200': { description: Product, channel, minimum Windows, version, SHA256, HTTPS URL, release-signing key id and signature }
+  /v1/sync/batches:
+    post:
+      summary: Optional opt-in synchronization (planned, not enabled)
+      security: [{ deviceCredential: [] }]
+      responses:
+        '202': { description: Idempotent batch acknowledgement scoped to business, branch and device }
+components:
+  securitySchemes:
+    deviceCredential: { type: http, scheme: bearer, description: Device secret stored with Windows DPAPI, rotated by Hub }
+    ownerSession: { type: http, scheme: bearer, description: Hub web owner session only; never persisted by Flow }
+  schemas:
+    Envelope:
+      type: object
+      additionalProperties: false
+      required: [payload, signature]
+      properties:
+        payload: { type: string, description: Base64url exact UTF-8 JSON claims bytes }
+        signature: { type: string, description: Base64url Ed25519 signature over payload bytes }
+    Claims:
+      type: object
+      additionalProperties: false
+      required: [kid, version, product, subscription, business, device, modules, issuedAt, expiresAt, offlineUntil, graceSeconds]
+      properties:
+        kid: { type: string }
+        version: { type: integer, minimum: 1 }
+        product: { const: daidar-flow }
+        subscription: { type: string }
+        business: { type: string }
+        device: { type: string, format: uuid }
+        modules: { type: array, items: { type: string } }
+        issuedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        offlineUntil: { type: string, format: date-time }
+        graceSeconds: { type: integer, minimum: 0, maximum: 604800 }
