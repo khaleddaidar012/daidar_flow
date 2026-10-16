@@ -36,3 +36,6 @@ Windows NSIS x64، أيقونة مشتقة بتكبير أصل دعيدر دون
 npm audit عند تثبيت التبعيات:0 تنبيهات، inventory التبعيات لاGPL/AGPL/UNKNOWN في metadata؛ مراجعة إشعاراتChromium المرفقة مطلوبة قبل التوزيع التجاري.
 ## تشغيل الاختبارات
 npm run typecheck ثمnpm test ثمnpm run build. لا اختبارات تستخدم بيانات عملاء. اختبارElectron يستخدم test-results/electron-userdata، ويتطلب تشغيلnpm run dev:hub وضبطDAIDAR_DEV_HUB=1 وDAIDAR_SMOKE=1 ثمnpm start؛ راجعelectron-smoke.json ولقطاتPNG فيtest-results.
+
+## نتيجة اختبار المثبت الفعلي
+نجح على هذا الجهاز: تثبيت NSIS صامت في مجلد اختبار، بدء التطبيق المثبت ووصول React إلى bootstrap عبر IPC، إزالة البرنامج، وبقاء قاعدة بيانات العميل خارج مجلد التثبيت. المخطط2 والتوقيع NotSigned. النتيجة الخام في validation/installer-smoke.json. الجهاز الإضافي النظيف والطابعة ما زالا مطلوبين. فحص app.asar وجد859 مدخلًا دون ملفات .env أو SQLite أو مفاتيح خاصة.
