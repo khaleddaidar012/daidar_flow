@@ -1,7 +1,6 @@
 // Publish only the requested repository's pilot release. Credentials stay in memory.
 import { spawnSync } from "node:child_process";
 import { readFile, stat, writeFile } from "node:fs/promises";
-import { createReadStream } from "node:fs";
 import { createHash } from "node:crypto";
 const repo = "khaleddaidar012/daidar_flow",
   tag = "v0.1.0-pilot";
@@ -38,6 +37,7 @@ if (!token)
 const headers = {
   Authorization: "Bearer " + token,
   Accept: "application/vnd.github+json",
+  "User-Agent": "Daidar-Flow-Release",
   "X-GitHub-Api-Version": "2022-11-28",
 };
 async function api(url, options = {}) {
@@ -54,7 +54,7 @@ async function api(url, options = {}) {
     signal: AbortSignal.timeout(300000),
   });
   if (!r.ok) throw new Error("GitHub API status " + r.status);
-  return r.json();
+  return r.status === 204 ? null : r.json();
 }
 const installer = "release/Daidar Flow Pilot Setup 0.1.0.exe";
 const size = (await stat(installer)).size;
@@ -97,7 +97,16 @@ else throw new Error("GitHub release lookup status " + lookup.status);
 for (const file of [installer, "release/SHA256SUMS.txt"]) {
   const name = file.split("/").at(-1);
   const existing = release.assets?.find((a) => a.name === name);
-  if (existing) {
+  if (existing && existing.state === "starter") {
+    await api(
+      "https://api.github.com/repos/" +
+        repo +
+        "/releases/assets/" +
+        existing.id,
+      { method: "DELETE" },
+    );
+  }
+  if (existing && existing.state !== "starter") {
     if (name.endsWith(".exe") && existing.size !== size)
       throw new Error("Existing release asset has different size");
     continue;
@@ -112,7 +121,7 @@ for (const file of [installer, "release/SHA256SUMS.txt"]) {
         : "text/plain",
       "content-length": String((await stat(file)).size),
     },
-    body: createReadStream(file),
+    body: await readFile(file),
     duplex: "half",
   });
 }

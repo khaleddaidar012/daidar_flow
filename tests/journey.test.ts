@@ -227,10 +227,24 @@ test("full general-store journey, costs, split tender, partial return, cash and 
     );
     assert.equal(s.product(item.id).quantity, 16000);
     assert.equal(s.session, undefined);
-    // Fresh installation opens backup without its old license or machine identity.
-    const second = new Store(join(f.dir, "backup.sqlite"), f.license);
-    assert.equal(second.product(item.id).quantity, 16000);
-    second.close();
+    // Restore into a separately activated installation; its license is retained.
+    const second = fixture();
+    try {
+      await manager(second);
+      assert.notEqual(second.license.device, f.license.device);
+      await second.store.restore(
+        join(f.dir, "backup.sqlite"),
+        join(second.dir, "before-restore.sqlite"),
+        "manager-password-42",
+        "استعادة في تثبيت آخر",
+      );
+      assert.equal(second.store.product(item.id).quantity, 16000);
+      assert.equal(second.license.status().active, true);
+      assert.equal(second.license.status().device, second.claims.device);
+    } finally {
+      second.cleanup();
+    }
+
     await s.execute("login", {
       username: "admin",
       password: "manager-password-42",
