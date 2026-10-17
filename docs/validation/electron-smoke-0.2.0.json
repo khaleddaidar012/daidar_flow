@@ -1,0 +1,18 @@
+{
+  "passed": true,
+  "node": "24.19.0",
+  "checks": [
+    "React local login",
+    "quick shift button and opening balance dialog",
+    "three-field product form with optional barcode generated",
+    "React purchase: supplier, 100 units, total 10000, paid 5000, supplier due 5000",
+    "limited employee persisted",
+    "purchase pack 12 through sandbox preload",
+    "React keyboard-wedge barcode Enter, cash fill, F8 sale commit",
+    "linked partial return and cash closure",
+    "actual report gross profit",
+    "Electron node:sqlite backup API",
+    "English LTR toggle"
+  ],
+  "printing": "not attempted: physical printer unavailable"
+}

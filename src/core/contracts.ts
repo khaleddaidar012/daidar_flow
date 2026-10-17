@@ -45,6 +45,21 @@ export const schemas = {
   userReset: z
     .object({ userId: id, password, managerPassword: z.string().max(128) })
     .strict(),
+  productQuick: z
+    .object({
+      operationId: id,
+      name: z.string().trim().min(1).max(160),
+      retail: integer,
+      openingQuantity: integer,
+      barcode: z.string().trim().max(80).default(""),
+      category: z.string().max(80).default(""),
+      baseUnit: z.string().min(1).max(20).default("قطعة"),
+      packName: z.string().min(1).max(20).default("كرتونة"),
+      packFactor: qty.default(12000),
+      purchase: integer.default(0),
+      wholesale: integer.optional(),
+    })
+    .strict(),
   productCreate: z
     .object({
       name: z.string().min(1).max(160),
@@ -63,6 +78,7 @@ export const schemas = {
   productUpdate: z
     .object({
       id,
+      barcode: z.string().trim().min(1).max(80).optional(),
       name: z.string().min(1).max(160),
       category: z.string().max(80),
       retail: integer,
@@ -84,7 +100,10 @@ export const schemas = {
     .object({
       operationId: id,
       partyId: id.optional(),
-      lines: z.array(item).min(1).max(100),
+      lines: z
+        .array(item.extend({ totalCost: integer.optional() }).strict())
+        .min(1)
+        .max(100),
       payments: z.array(payment).max(10),
     })
     .strict(),

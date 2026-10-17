@@ -34,6 +34,7 @@ let importRows: any[] | undefined,
   serial: Promise<any> = Promise.resolve();
 app.setName(BUILD_PILOT ? "Daidar Flow Pilot" : "Daidar Flow");
 if (!app.isPackaged && process.env.DAIDAR_SMOKE === "1") {
+  app.disableHardwareAcceleration();
   const testRoot = resolve("test-results/electron-userdata");
   mkdirSync(testRoot, { recursive: true });
   app.setPath("userData", testRoot);

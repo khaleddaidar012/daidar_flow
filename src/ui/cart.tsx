@@ -116,9 +116,18 @@ export function Cart({
                 if (e.key === "Enter") {
                   e.preventDefault();
                   const p = data.products.find(
-                    (p: any) => p.barcode === search,
+                    (p: any) => p.barcode === search.trim(),
                   );
-                  if (p) add(p);
+                  if (p) {
+                    setLocal("");
+                    add(p);
+                  } else
+                    setLocal(
+                      t(
+                        "الباركود غير مسجل. أضفه للمنتج من التفاصيل الاختيارية، أو ابحث بالاسم.",
+                        "Barcode not registered. Add it to the product or search by name.",
+                      ),
+                    );
                 }
               }}
             />
@@ -135,6 +144,14 @@ export function Cart({
               </button>
             ))}
           </div>
+          {search && visible.length === 0 && (
+            <p className="muted">
+              {t(
+                "لا يوجد منتج مطابق. تأكد من تسجيل الباركود في بيانات المنتج.",
+                "No matching product. Check the registered barcode.",
+              )}
+            </p>
+          )}
           {!data.products.length && (
             <p>{t("أضف منتجات أولًا", "Add products first")}</p>
           )}
@@ -189,6 +206,7 @@ export function Cart({
               setCard("0");
               setOther("0");
               setDiscount("0");
+              input.current?.focus();
             } catch (e) {
               setLocal(String(e));
             }

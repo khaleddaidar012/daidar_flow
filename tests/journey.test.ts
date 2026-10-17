@@ -714,3 +714,119 @@ test("full export retains older pages and excludes authentication secrets after 
     f.cleanup();
   }
 });
+
+test("simple product opening stock and supplier purchase 10000 / paid 5000 with exact total costs", async () => {
+  const f = fixture();
+  try {
+    await manager(f);
+    const s = f.store;
+    const product = await s.execute("productQuick", {
+      operationId: randomUUID(),
+      name: "شامبو",
+      retail: 15000,
+      openingQuantity: 0,
+    });
+    assert.ok(product.barcode.startsWith("DF"));
+    await s.execute("productUpdate", {
+      id: product.id,
+      name: "شامبو",
+      category: "عام",
+      retail: 15000,
+      wholesale: 15000,
+      purchase: 0,
+      reorder: 0,
+      barcode: "0622000123456",
+    });
+    assert.equal(s.product(product.id).barcode, "0622000123456");
+    const openingId = randomUUID(),
+      openingInput = {
+        operationId: openingId,
+        name: "رصيد افتتاحي",
+        retail: 5000,
+        openingQuantity: 2000,
+        purchase: 3000,
+      };
+    const opening = await s.execute("productQuick", openingInput);
+    assert.deepEqual(await s.execute("productQuick", openingInput), opening);
+    assert.equal(s.product(opening.id).quantity, 2000);
+    assert.equal(s.product(opening.id).value, 6000);
+    assert.equal(
+      s.all("SELECT * FROM movements WHERE product=?", opening.id).length,
+      1,
+    );
+    const supplier = await s.execute("partyCreate", {
+      name: "خالد دعيدر",
+      kind: "supplier",
+      opening: 0,
+      creditLimit: 0,
+      reason: "حساب مورد جديد",
+    });
+    const purchaseInput = {
+      operationId: randomUUID(),
+      partyId: supplier.id,
+      lines: [
+        {
+          productId: product.id,
+          unit: "base",
+          quantity: 100000,
+          price: 10000,
+          totalCost: 1000000,
+        },
+      ],
+      payments: [{ method: "other", amount: 500000 }],
+    };
+    const purchase = await s.execute("purchase", purchaseInput);
+    assert.equal(purchase.total, 1000000);
+    assert.equal(s.product(product.id).quantity, 100000);
+    assert.equal(s.product(product.id).value, 1000000);
+    assert.equal(s.balance(supplier.id), 500000);
+    assert.equal(s.one("SELECT * FROM shifts WHERE closed IS NULL"), undefined);
+    await s.execute("partyPay", {
+      operationId: randomUUID(),
+      partyId: supplier.id,
+      amount: 200000,
+      method: "other",
+      reason: "سداد جزء من حساب خالد",
+    });
+    assert.equal(s.balance(supplier.id), 300000);
+    const fractional = await s.execute("productQuick", {
+      operationId: randomUUID(),
+      name: "تكلفة لا تقبل القسمة",
+      retail: 100,
+      openingQuantity: 0,
+    });
+    await s.execute("purchase", {
+      operationId: randomUUID(),
+      partyId: supplier.id,
+      lines: [
+        {
+          productId: fractional.id,
+          unit: "base",
+          quantity: 3000,
+          price: 33,
+          totalCost: 100,
+        },
+      ],
+      payments: [],
+    });
+    assert.equal(s.product(fractional.id).value, 100);
+    await assert.rejects(
+      s.execute("sale", {
+        operationId: randomUUID(),
+        lines: [
+          {
+            productId: product.id,
+            unit: "base",
+            quantity: 1000,
+            price: 15000,
+            totalCost: 1,
+          },
+        ],
+        discount: 0,
+        payments: [],
+      }),
+    );
+  } finally {
+    f.cleanup();
+  }
+});

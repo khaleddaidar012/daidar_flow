@@ -1,3 +1,4 @@
+import { ProductForm } from "./product-form";
 import React, { useState } from "react";
 import { decimal } from "../core/money";
 import { Form, Table, Card, money, quantity, type Props } from "./common";
@@ -15,49 +16,11 @@ export function Products({ data, action, busy, t }: Props) {
           {t("تصدير المنتجات", "Export products")}
         </button>
       )}
-      <Form
-        busy={busy}
-        submit={t("إضافة منتج", "Add product")}
-        fields={[
-          ["name", t("الاسم", "Name"), "text"],
-          ["barcode", t("الباركود", "Barcode"), "text"],
-          ["category", t("التصنيف", "Category"), "text"],
-          [
-            "baseUnit",
-            t("الوحدة الأساسية", "Base unit"),
-            "text",
-            t("قطعة", "piece"),
-          ],
-          [
-            "packName",
-            t("اسم العبوة", "Pack name"),
-            "text",
-            t("كرتونة", "carton"),
-          ],
-          [
-            "packFactor",
-            t("عدد الوحدات بالعبوة", "Base units per pack"),
-            "number",
-            "12",
-          ],
-          ["retail", t("تجزئة / وحدة", "Retail / base"), "number"],
-          ["wholesale", t("جملة / وحدة", "Wholesale / base"), "number"],
-          ["purchase", t("تكلفة شراء / وحدة", "Purchase / base"), "number"],
-          ["reorder", t("حد الطلب", "Reorder level"), "number", "0"],
-        ]}
-        onSubmit={(v) =>
-          action("productCreate", {
-            ...v,
-            packFactor: decimal(v.packFactor, 3),
-            retail: decimal(v.retail),
-            wholesale: decimal(v.wholesale),
-            purchase: decimal(v.purchase),
-            reorder: decimal(v.reorder, 3),
-          })
-        }
-      />
-      <section className="panel">
-        <h2>{t("استيراد منتجات JSON", "Import products JSON")}</h2>
+      <ProductForm action={action} busy={busy} t={t} />
+      <details className="panel import-tools">
+        <summary>
+          {t("استيراد منتجات من ملف", "Import products from file")}
+        </summary>
         <button
           disabled={busy}
           onClick={() =>
@@ -93,7 +56,7 @@ export function Products({ data, action, busy, t }: Props) {
             </button>
           </>
         )}
-      </section>
+      </details>
       <Table
         columns={[
           t("الاسم", "Name"),
@@ -111,7 +74,7 @@ export function Products({ data, action, busy, t }: Props) {
           p.pack_name + " × " + quantity(p.pack_factor),
           data.users.length > 0 ? (
             <button onClick={() => setEdit(p)}>
-              {t("تعديل الأسعار", "Edit pricing")}
+              {t("تعديل المنتج", "Edit product")}
             </button>
           ) : (
             "—"
@@ -132,6 +95,15 @@ export function Products({ data, action, busy, t }: Props) {
             submit={t("حفظ", "Save")}
             fields={[
               ["name", t("الاسم", "Name"), "text", edit.name],
+              [
+                "barcode",
+                t(
+                  "الباركود — امسح الكود الفعلي هنا",
+                  "Barcode — scan the actual code here",
+                ),
+                "text",
+                edit.barcode,
+              ],
               ["category", t("التصنيف", "Category"), "text", edit.category],
               ["retail", t("تجزئة", "Retail"), "number", money(edit.retail)],
               [
@@ -577,6 +549,14 @@ export function Reports({ action, busy, t }: Props) {
         ]}
         onSubmit={async (v) => setReport(await action("report", v))}
       />
+      {report?.hasZeroCostOpening && (
+        <p className="status">
+          {t(
+            "يوجد رصيد افتتاحي مسجل بتكلفة صفر. قد يكون الربح المعروض أعلى من الربح الفعلي حتى مراجعة تقييم هذا الرصيد.",
+            "Opening stock was recorded at zero cost. Reported profit may exceed actual profit until this valuation is reviewed.",
+          )}
+        </p>
+      )}
       {report && (
         <>
           <div className="cards">

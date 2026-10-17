@@ -65,6 +65,84 @@ module.exports = async ({ win, store, license, hub }) => {
     await wait(() => js("document.querySelectorAll('nav button').length>5"));
     checks.push("React local login");
   }
+
+  await js("document.querySelector('.shift-shortcut').click()");
+  await wait(() => js("!!document.querySelector('[role=dialog]')"));
+  await js(
+    "document.querySelector('[role=dialog] input[name=float]').value='100';document.querySelector('[role=dialog] form').requestSubmit()",
+  );
+  await wait(() => !!store.one("SELECT id FROM shifts WHERE closed IS NULL"));
+  await wait(() => js("!document.querySelector('[role=dialog]')"));
+  await invoke("shiftClose", {
+    operationId: randomUUID(),
+    actual: 10000,
+    reason: "",
+  });
+  checks.push("quick shift button and opening balance dialog");
+  await js(
+    "Array.from(document.querySelectorAll('nav button')).find(b=>b.textContent==='المنتجات').click()",
+  );
+  await wait(() => js("!!document.querySelector('.product-form')"));
+  await fs.writeFile(
+    "test-results/products-v020.png",
+    (await win.webContents.capturePage()).toPNG(),
+  );
+  const simpleName = "منتج مبسط " + Date.now();
+  await js(
+    `document.querySelector('.product-form [name=name]').value=${JSON.stringify(simpleName)};document.querySelector('.product-form [name=retail]').value='150';document.querySelector('.product-form [name=openingQuantity]').value='0';document.querySelector('.product-form').requestSubmit();`,
+  );
+  await wait(
+    () => !!store.one("SELECT id FROM products WHERE name=?", simpleName),
+  );
+  const simple = store.one("SELECT * FROM products WHERE name=?", simpleName);
+  checks.push("three-field product form with optional barcode generated");
+  await js(
+    "Array.from(document.querySelectorAll('nav button')).find(b=>b.textContent==='المشتريات').click()",
+  );
+  await wait(() => js("!!document.querySelector('.purchase-form')"));
+  await js(
+    "Array.from(document.querySelectorAll('.supplier-panel button')).find(b=>b.textContent.includes('مورد جديد')).click()",
+  );
+  await wait(() => js("!!document.querySelector('.inline-create')"));
+  const supplierName = "خالد دعيدر اختبار " + Date.now();
+  await js(
+    `var input=document.querySelector('.inline-create input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(supplierName)});input.dispatchEvent(new Event('input',{bubbles:true}));`,
+  );
+  await delay(50);
+  await js("document.querySelector('.inline-create').requestSubmit()");
+  await wait(
+    () => !!store.one("SELECT id FROM parties WHERE name=?", supplierName),
+  );
+  const purchaseSupplier = store.one(
+    "SELECT * FROM parties WHERE name=?",
+    supplierName,
+  );
+  await js(
+    `var input=document.querySelector('.purchase-lines select');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(input,${JSON.stringify(simple.id)});input.dispatchEvent(new Event('change',{bubbles:true}));`,
+  );
+  await delay(50);
+  await js(
+    `for(const [selector,value] of [['.purchase-lines input[aria-label="الكمية"]','100'],['.purchase-lines input[aria-label="إجمالي تكلفة السطر"]','10000'],['.purchase-form input[name=paid]','5000']]){var input=document.querySelector(selector);Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}));}`,
+  );
+  await delay(100);
+  await fs.writeFile(
+    "test-results/purchase-v020.png",
+    (await win.webContents.capturePage()).toPNG(),
+  );
+  await js("document.querySelector('.purchase-form').requestSubmit()");
+  await wait(
+    () =>
+      !!store.one(
+        "SELECT id FROM documents WHERE party=?",
+        purchaseSupplier.id,
+      ),
+  );
+  assert.equal(store.product(simple.id).quantity, 100000);
+  assert.equal(store.product(simple.id).value, 1000000);
+  assert.equal(store.balance(purchaseSupplier.id), 500000);
+  checks.push(
+    "React purchase: supplier, 100 units, total 10000, paid 5000, supplier due 5000",
+  );
   const employee = await invoke("userCreate", {
     username: "desktop-cashier-" + Date.now(),
     password: "temporary-password-1",

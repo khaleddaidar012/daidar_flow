@@ -1,8 +1,9 @@
 $ErrorActionPreference='Stop'
+if(Get-Process -Name 'Daidar Flow Pilot' -ErrorAction SilentlyContinue){throw 'Close the running pilot app before running the installer smoke test.'}
 $taskWorkspace=(Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $taskInstall=[System.IO.Path]::GetFullPath((Join-Path $taskWorkspace 'test-results\installed-pilot'))
 if (-not $taskInstall.StartsWith($taskWorkspace+[System.IO.Path]::DirectorySeparatorChar,[System.StringComparison]::OrdinalIgnoreCase)) { throw 'Test install outside workspace' }
-$taskInstaller=Join-Path $taskWorkspace 'release\Daidar Flow Pilot Setup 0.1.0.exe'
+$taskInstaller=Join-Path $taskWorkspace 'release\Daidar Flow Pilot Setup 0.2.0.exe'
 $taskP=Start-Process -FilePath $taskInstaller -ArgumentList "/S /D=$taskInstall" -WindowStyle Hidden -PassThru
 if (-not $taskP.WaitForExit(60000)) { throw 'Installer timeout' }
 if ($taskP.ExitCode -ne 0) { throw "Installer exit $($taskP.ExitCode)" }

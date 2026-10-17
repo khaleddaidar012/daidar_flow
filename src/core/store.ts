@@ -272,6 +272,39 @@ export class Store {
       this.auth("cost", false);
       return this.report(p.from, p.to);
     }
+    if (command === "productQuick") {
+      this.auth("products");
+      if (p.openingQuantity) this.auth("adjust");
+      return this.operation(p, () => {
+        const id = randomUUID(),
+          barcode =
+            p.barcode || "DF" + randomUUID().replaceAll("-", "").slice(0, 16);
+        this.run(
+          "INSERT INTO products(id,name,barcode,category,base_unit,pack_name,pack_factor,retail,wholesale,purchase,reorder) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+          id,
+          p.name,
+          barcode,
+          p.category,
+          p.baseUnit,
+          p.packName,
+          p.packFactor,
+          p.retail,
+          p.wholesale ?? p.retail,
+          p.purchase,
+          0,
+        );
+        if (p.openingQuantity)
+          this.move(
+            id,
+            p.openingQuantity,
+            ratio(p.purchase, p.openingQuantity, 1000),
+            null,
+            "رصيد افتتاحي عند إنشاء المنتج",
+          );
+        this.audit("product-create", id);
+        return { id, barcode };
+      });
+    }
     if (command === "productCreate") {
       this.auth("products");
       const id = randomUUID();
@@ -295,14 +328,24 @@ export class Store {
     if (command === "productUpdate") {
       this.auth("pricing");
       const product = this.product(p.id);
+      if (
+        p.barcode &&
+        this.one(
+          "SELECT id FROM products WHERE barcode=? AND id<>?",
+          p.barcode,
+          p.id,
+        )
+      )
+        throw new Error("الباركود مسجل لمنتج آخر");
       this.run(
-        "UPDATE products SET name=?,category=?,retail=?,wholesale=?,purchase=?,reorder=? WHERE id=?",
+        "UPDATE products SET name=?,category=?,retail=?,wholesale=?,purchase=?,reorder=?,barcode=? WHERE id=?",
         p.name,
         p.category,
         p.retail,
         p.wholesale,
         p.purchase,
         p.reorder,
+        p.barcode || product.barcode,
         product.id,
       );
       this.audit("product-update", product.id);
@@ -619,7 +662,10 @@ export class Store {
             )
         )
           this.auth("discount");
-        const gross = ratio(l.price, l.quantity, 1000);
+        const gross =
+          kind === "purchase" && l.totalCost !== undefined
+            ? l.totalCost
+            : ratio(l.price, l.quantity, 1000);
         const cost = kind === "sale" ? this.takeCost(product, quantity) : gross;
         return { ...l, product, quantity, gross, cost };
       });
@@ -686,6 +732,12 @@ export class Store {
           l.product.barcode,
           l.product.base_unit,
         );
+        if (kind === "purchase")
+          this.run(
+            "UPDATE products SET purchase=? WHERE id=?",
+            ratio(l.cost, 1000, l.quantity),
+            l.product.id,
+          );
         this.move(
           l.product.id,
           kind === "sale" ? -l.quantity : l.quantity,
@@ -895,6 +947,9 @@ export class Store {
     const args = [from + "T00:00:00.000Z", to + "T23:59:59.999Z"];
     if (args[0] > args[1]) throw new Error("فترة غير صالحة");
     return {
+      hasZeroCostOpening: !!this.one(
+        "SELECT id FROM movements WHERE reason='رصيد افتتاحي عند إنشاء المنتج' AND quantity>0 AND value=0 LIMIT 1",
+      ),
       summary: this.one(
         "SELECT COALESCE(SUM(CASE WHEN kind='sale' THEN total WHEN kind='sale-return' THEN -total ELSE 0 END),0) sales,COALESCE(SUM(CASE WHEN kind='sale' THEN cost WHEN kind='sale-return' THEN -cost ELSE 0 END),0) cost,COALESCE(SUM(CASE WHEN kind='sale-return' THEN total ELSE 0 END),0) returns FROM documents WHERE created BETWEEN ? AND ?",
         ...args,

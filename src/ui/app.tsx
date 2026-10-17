@@ -1,3 +1,5 @@
+import { decimal } from "../core/money";
+import { Purchase } from "./purchase";
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Command } from "../core/contracts";
@@ -31,7 +33,8 @@ function App() {
     [busy, setBusy] = useState(false),
     [notices, setNotices] = useState(""),
     [notice, setNotice] = useState(""),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [shiftDialog, setShiftDialog] = useState(false);
   const t = (ar: string, en: string) => (lang === "ar" ? ar : en);
   const pending = useRef(new Map<string, string>());
   async function call(command: Command, payload: any = {}) {
@@ -60,6 +63,47 @@ function App() {
     document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
     document.documentElement.lang = lang;
   }, [lang]);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 3500);
+    return () => clearTimeout(timer);
+  }, [notice]);
+  useEffect(() => {
+    if (!shiftDialog) return;
+    const previous = document.activeElement as HTMLElement;
+    const timer = setTimeout(
+      () =>
+        document
+          .querySelector<HTMLInputElement>('[role="dialog"] input')
+          ?.focus(),
+      0,
+    );
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShiftDialog(false);
+      if (e.key === "Tab") {
+        const fields = [
+          ...document.querySelectorAll<HTMLElement>(
+            '[role="dialog"] button,[role="dialog"] input',
+          ),
+        ];
+        const first = fields[0],
+          last = fields.at(-1);
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("keydown", handler);
+      previous?.focus();
+    };
+  }, [shiftDialog]);
   const action: Action = async (command, payload = {}) => {
     setBusy(true);
     setError("");
@@ -67,6 +111,7 @@ function App() {
     const key = JSON.stringify({ command, payload });
     if (
       [
+        "productQuick",
         "sale",
         "purchase",
         "return",
@@ -87,9 +132,13 @@ function App() {
       pending.current.delete(key);
       await refresh();
       setNotice(
-        result?.cancelled
-          ? t("تم الإلغاء", "Cancelled")
-          : t("تمت العملية بنجاح", "Operation completed"),
+        ["login", "logout", "companyLink", "report", "notices"].includes(
+          command,
+        )
+          ? ""
+          : result?.cancelled
+            ? t("تم الإلغاء", "Cancelled")
+            : t("تمت العملية بنجاح", "Operation completed"),
       );
       return result;
     } catch (e) {
@@ -108,12 +157,29 @@ function App() {
         <img src="../../public/logo.png" alt="Daidar" />
         <div>
           <strong>{t("دعيدر فلو", "Daidar Flow")}</strong>
+          {boot?.pilot && (
+            <span className="pilot-badge">{t("نسخة تجريبية", "Pilot")}</span>
+          )}
           <small>
             {t("شغلك كله… في مسار واحد", "All your work… in one flow")}
           </small>
         </div>
       </div>
       <div className="tools">
+        {boot?.session &&
+          !boot.session.mustChange &&
+          ["manager", "cashier"].includes(boot.session.role) && (
+            <button
+              className="shift-shortcut"
+              onClick={() =>
+                data?.currentShift ? setPage("shifts") : setShiftDialog(true)
+              }
+            >
+              {data?.currentShift
+                ? t("● وردية مفتوحة", "● Shift open")
+                : t("+ فتح وردية", " + Open shift")}
+            </button>
+          )}
         <button onClick={() => setLang(lang === "ar" ? "en" : "ar")}>
           {lang === "ar" ? "English" : "العربية"}
         </button>
@@ -137,14 +203,6 @@ function App() {
   );
   const status = (
     <>
-      {boot?.pilot && (
-        <div role="status" className="status">
-          {t(
-            "وضع تجربة — محاكي هب محلي، وليس اشتراكًا تجاريًا",
-            "Pilot mode — local Hub simulator, not a commercial subscription",
-          )}
-        </div>
-      )}
       {busy && (
         <div role="status" className="status">
           {t("جاري التنفيذ…", "Working…")}
@@ -156,7 +214,7 @@ function App() {
         </div>
       )}
       {notice && (
-        <div role="status" className="success">
+        <div role="status" className="toast">
           {notice}
         </div>
       )}
@@ -196,8 +254,8 @@ function App() {
           </p>
           <p className="muted">
             {t(
-              "إصدار تجريبي 0.1.0. إن لم تتوفر البوابة، استخدم محاكي التطوير وفق الدليل.",
-              "Pilot 0.1.0. Use the separate simulator for development if Hub is unavailable.",
+              "إصدار تجريبي 0.2.0. إن لم تتوفر البوابة، استخدم محاكي التطوير وفق الدليل.",
+              "Pilot 0.2.0. Use the separate simulator for development if Hub is unavailable.",
             )}
           </p>
           <code>{boot.license.device}</code>
@@ -385,8 +443,9 @@ function App() {
           </>
         );
       case "sale":
+        return <Cart kind="sale" {...props} />;
       case "purchase":
-        return <Cart key={page} kind={page} {...props} />;
+        return <Purchase {...props} />;
       case "products":
         return <Products {...props} />;
       case "inventory":
@@ -518,7 +577,7 @@ function App() {
               src="../../public/logo.png"
               alt="Daidar"
             />
-            <h2>دعيدر فلو | Daidar Flow 0.1.0</h2>
+            <h2>دعيدر فلو | Daidar Flow 0.2.0</h2>
             <p>
               {t(
                 "يتبع دعيدر هب — إصدار تجريبي لمتجر عام",
@@ -593,7 +652,7 @@ function App() {
           <small>
             {t("متجر عام · جهاز واحد", "General store · one device")}
             <br />
-            v0.1.0
+            v0.2.0
           </small>
         </aside>
         <main>
@@ -610,6 +669,46 @@ function App() {
         </main>
       </div>
       {footer}
+      {shiftDialog && (
+        <div className="modal-backdrop">
+          <section
+            className="modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="shift-title"
+          >
+            <div className="section-heading">
+              <h2 id="shift-title">{t("فتح وردية جديدة", "Open a shift")}</h2>
+              <button
+                onClick={() => setShiftDialog(false)}
+                aria-label={t("إغلاق", "Close")}
+              >
+                ×
+              </button>
+            </div>
+            <p className="muted">
+              {t(
+                "أدخل النقد الموجود في الدرج عند بداية الوردية.",
+                "Enter the cash currently in the drawer.",
+              )}
+            </p>
+            <Form
+              busy={busy}
+              submit={t("فتح الوردية الآن", "Open shift now")}
+              fields={[
+                ["float", t("عهدة البداية", "Opening cash"), "number", "0"],
+              ]}
+              onSubmit={async (v) => {
+                const r = await action("shiftOpen", {
+                  float: decimal(v.float),
+                });
+                setShiftDialog(false);
+                return r;
+              }}
+            />
+          </section>
+        </div>
+      )}
     </>
   );
 }
