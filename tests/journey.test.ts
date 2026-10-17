@@ -830,3 +830,128 @@ test("simple product opening stock and supplier purchase 10000 / paid 5000 with 
     f.cleanup();
   }
 });
+
+test("first-run setup validates sequence, persists back navigation and disappears after completion", async () => {
+  const f = fixture();
+  try {
+    await manager(f);
+    const s = f.store;
+    assert.equal((await s.execute("bootstrap", {})).onboarding.step, 0);
+    await assert.rejects(s.execute("onboardingComplete", {}), /أكمل/);
+    await assert.rejects(
+      s.execute("onboardingMove", { step: 2, expectedStep: 0 }),
+      /تغيرت/,
+    );
+    await assert.rejects(
+      s.execute("onboardingMove", { step: 1, expectedStep: 0 }),
+      /مورد/,
+    );
+    await s.execute("partyCreate", {
+      name: "مورد الإعداد",
+      kind: "supplier",
+      opening: 12550,
+      creditLimit: 0,
+      reason: "افتتاح موثق",
+    });
+    await s.execute("onboardingMove", { step: 1, expectedStep: 0 });
+    await assert.rejects(
+      s.execute("onboardingMove", { step: 2, expectedStep: 1 }),
+      /منتج/,
+    );
+    await s.execute("productQuick", {
+      operationId: randomUUID(),
+      name: "منتج الإعداد",
+      retail: 2500,
+      openingQuantity: 3000,
+      purchase: 1000,
+    });
+    await s.execute("onboardingMove", { step: 2, expectedStep: 1 });
+    await assert.rejects(
+      s.execute("onboardingMove", { step: 3, expectedStep: 2 }),
+      /موظف/,
+    );
+    await s.execute("onboardingMove", { step: 1, expectedStep: 2 });
+    assert.equal(s.onboarding().counts.products, 1);
+    await s.execute("onboardingMove", { step: 2, expectedStep: 1 });
+    const second = new Store(s.path, f.license);
+    assert.equal(second.onboarding().step, 2);
+    second.close();
+    await s.execute("userCreate", {
+      username: "setup-cashier",
+      password: "temporary-password-42",
+      role: "cashier",
+    });
+    await s.execute("onboardingMove", { step: 3, expectedStep: 2 });
+    assert.equal(s.onboarding().completed, false);
+    await s.execute("onboardingComplete", {});
+    await s.execute("onboardingComplete", {});
+    assert.equal(s.onboarding().completed, true);
+    assert.equal(
+      s.all("SELECT id FROM audit WHERE action='onboarding-complete'").length,
+      1,
+    );
+    const reopened = new Store(s.path, f.license);
+    await reopened.execute("login", {
+      username: "admin",
+      password: "manager-password-42",
+    });
+    assert.equal(
+      (await reopened.execute("bootstrap", {})).onboarding.completed,
+      true,
+    );
+    assert.equal(reopened.onboarding().counts.products, 1);
+    await reopened.execute("logout", {});
+    await reopened.execute("login", {
+      username: "setup-cashier",
+      password: "temporary-password-42",
+    });
+    await reopened.execute("password", {
+      oldPassword: "temporary-password-42",
+      newPassword: "cashier-new-password-42",
+    });
+    assert.equal(
+      (await reopened.execute("bootstrap", {})).onboarding,
+      undefined,
+    );
+    await assert.rejects(
+      reopened.execute("onboardingComplete", {}),
+      /غير مسموح/,
+    );
+    reopened.close();
+  } finally {
+    f.cleanup();
+  }
+});
+test("sole owner can explicitly finish setup without creating a fake employee", async () => {
+  const f = fixture();
+  try {
+    await manager(f);
+    const s = f.store;
+    await s.execute("partyCreate", {
+      name: "مورد",
+      kind: "supplier",
+      opening: 0,
+      creditLimit: 0,
+      reason: "إعداد أولي",
+    });
+    await s.execute("onboardingMove", { step: 1, expectedStep: 0 });
+    await s.execute("productQuick", {
+      operationId: randomUUID(),
+      name: "منتج",
+      retail: 1000,
+      openingQuantity: 0,
+    });
+    await s.execute("onboardingMove", { step: 2, expectedStep: 1 });
+    await s.execute("onboardingMove", {
+      step: 3,
+      expectedStep: 2,
+      managerOnly: true,
+    });
+    await s.execute("onboardingComplete", {});
+    assert.equal(s.onboarding().completed, true);
+    assert.equal(s.onboarding().counts.employees, 0);
+    assert.equal(s.onboarding().managerOnly, true);
+  } finally {
+    f.cleanup();
+  }
+});

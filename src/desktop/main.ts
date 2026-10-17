@@ -100,6 +100,8 @@ else
         icon: join(app.getAppPath(), "public/icon.png"),
         webPreferences: {
           preload: join(__dirname, "preload.js"),
+          backgroundThrottling:
+            app.isPackaged || process.env.DAIDAR_SMOKE !== "1",
           contextIsolation: true,
           nodeIntegration: false,
           sandbox: true,

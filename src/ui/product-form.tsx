@@ -6,7 +6,11 @@ export function ProductForm({
   busy,
   t,
   onCreated,
-}: Omit<Props, "data"> & { onCreated?: (p: any) => void }) {
+  wizard = false,
+}: Omit<Props, "data"> & {
+  onCreated?: (p: any, stay?: boolean) => void | Promise<void>;
+  wizard?: boolean;
+}) {
   const [error, setError] = useState(""),
     [opening, setOpening] = useState("0");
   return (
@@ -14,6 +18,9 @@ export function ProductForm({
       className="product-form"
       onSubmit={async (e) => {
         e.preventDefault();
+        const stay =
+          (e.nativeEvent as SubmitEvent).submitter?.getAttribute("value") ===
+          "more";
         const form = e.currentTarget,
           v = Object.fromEntries(new FormData(form));
         setError("");
@@ -30,7 +37,7 @@ export function ProductForm({
           });
           form.reset();
           setOpening("0");
-          onCreated?.(result);
+          await onCreated?.(result, stay);
         } catch (e) {
           setError(String(e));
         }
@@ -156,9 +163,16 @@ export function ProductForm({
           {error}
         </p>
       )}
-      <button className="primary" disabled={busy}>
-        {t("حفظ المنتج", "Save product")}
+      <button className="primary" name="intent" value="next" disabled={busy}>
+        {wizard
+          ? t("حفظ والتالي", "Save and next")
+          : t("حفظ المنتج", "Save product")}
       </button>
+      {wizard && (
+        <button type="submit" name="intent" value="more" disabled={busy}>
+          {t("حفظ وإضافة منتج آخر", "Save and add another product")}
+        </button>
+      )}
     </form>
   );
 }

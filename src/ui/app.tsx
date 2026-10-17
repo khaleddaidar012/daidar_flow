@@ -1,3 +1,4 @@
+import { SetupWizard } from "./setup-wizard";
 import { decimal } from "../core/money";
 import { Purchase } from "./purchase";
 import React, { useEffect, useRef, useState } from "react";
@@ -132,9 +133,15 @@ function App() {
       pending.current.delete(key);
       await refresh();
       setNotice(
-        ["login", "logout", "companyLink", "report", "notices"].includes(
-          command,
-        )
+        [
+          "login",
+          "logout",
+          "companyLink",
+          "report",
+          "notices",
+          "onboardingMove",
+          "onboardingComplete",
+        ].includes(command)
           ? ""
           : result?.cancelled
             ? t("تم الإلغاء", "Cancelled")
@@ -168,6 +175,7 @@ function App() {
       <div className="tools">
         {boot?.session &&
           !boot.session.mustChange &&
+          boot.onboarding?.completed !== false &&
           ["manager", "cashier"].includes(boot.session.role) && (
             <button
               className="shift-shortcut"
@@ -254,8 +262,8 @@ function App() {
           </p>
           <p className="muted">
             {t(
-              "إصدار تجريبي 0.2.0. إن لم تتوفر البوابة، استخدم محاكي التطوير وفق الدليل.",
-              "Pilot 0.2.0. Use the separate simulator for development if Hub is unavailable.",
+              "إصدار تجريبي 0.3.0. إن لم تتوفر البوابة، استخدم محاكي التطوير وفق الدليل.",
+              "Pilot 0.3.0. Use the separate simulator for development if Hub is unavailable.",
             )}
           </p>
           <code>{boot.license.device}</code>
@@ -363,6 +371,32 @@ function App() {
   const manager = boot.session.role === "manager",
     stock = manager || boot.session.role === "stock",
     cashier = manager || boot.session.role === "cashier";
+  if (
+    manager &&
+    boot.license.active &&
+    boot.onboarding &&
+    !boot.onboarding.completed
+  )
+    return (
+      <>
+        {header}
+        <main className="setup-main">
+          {status}
+          {data ? (
+            <SetupWizard
+              state={boot.onboarding}
+              data={data}
+              action={action}
+              busy={busy}
+              t={t}
+            />
+          ) : (
+            <p>{t("جاري تجهيز الإعداد…", "Preparing setup…")}</p>
+          )}
+        </main>
+        {footer}
+      </>
+    );
   const tabs = [
     ["dashboard", t("نظرة عامة", "Overview")],
     ...(cashier ? [["sale", t("الكاشير", "POS")]] : []),
@@ -577,7 +611,7 @@ function App() {
               src="../../public/logo.png"
               alt="Daidar"
             />
-            <h2>دعيدر فلو | Daidar Flow 0.2.0</h2>
+            <h2>دعيدر فلو | Daidar Flow 0.3.0</h2>
             <p>
               {t(
                 "يتبع دعيدر هب — إصدار تجريبي لمتجر عام",
@@ -652,7 +686,7 @@ function App() {
           <small>
             {t("متجر عام · جهاز واحد", "General store · one device")}
             <br />
-            v0.2.0
+            v0.3.0
           </small>
         </aside>
         <main>

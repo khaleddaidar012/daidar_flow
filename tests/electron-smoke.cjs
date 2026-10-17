@@ -21,6 +21,18 @@ module.exports = async ({ win, store, license, hub }) => {
       );
     }
   };
+  const capture = async (file) => {
+    await delay(350);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await fs.writeFile(file, (await win.webContents.capturePage()).toPNG());
+        return;
+      } catch (e) {
+        if (attempt === 2) throw e;
+        await delay(500);
+      }
+    }
+  };
   const invoke = async (command, payload = {}) => {
     const r = await js(
       "window.flow.invoke(" +
@@ -70,9 +82,78 @@ module.exports = async ({ win, store, license, hub }) => {
       `document.querySelector('[name="username"]').value='desktop-admin';document.querySelector('[name="password"]').value='desktop-test-password';document.querySelector('form').requestSubmit();`,
     );
     await wait(() => !!store.session);
-    await wait(() => js("document.querySelectorAll('nav button').length>5"));
+    await wait(() =>
+      js(
+        "document.querySelectorAll('nav button').length>5||!!document.querySelector('.setup-container')",
+      ),
+    );
     checks.push("React local login");
   }
+
+  assert.ok(store.path.includes("electron-userdata"));
+  store.run("DELETE FROM settings WHERE key='onboarding'");
+  await reload();
+  await wait(() => js("!!document.querySelector('.setup-container')"));
+  await capture("test-results/setup-suppliers-v030.png");
+  const initialSupplier = "مورد الإعداد " + Date.now();
+  await js(
+    `document.querySelector('.setup-supplier [name=name]').value=${JSON.stringify(initialSupplier)};document.querySelector('.setup-supplier [name=opening]').value='125.50';document.querySelector('.setup-supplier').requestSubmit();`,
+  );
+  await wait(() => store.onboarding().step === 1);
+  await wait(() =>
+    js("!!document.querySelector('.setup-pane:not([hidden]) .product-form')"),
+  );
+  const initialProduct = "منتج الإعداد " + Date.now();
+  await js(
+    `const form=document.querySelector('.setup-pane:not([hidden]) .product-form');for(const [name,value] of Object.entries({name:${JSON.stringify(initialProduct)},retail:'25',openingQuantity:'3',purchase:'10'}))form.querySelector('[name="'+name+'"]').value=value;form.requestSubmit();`,
+  );
+  await wait(() => store.onboarding().step === 2);
+  await wait(() =>
+    js("!!document.querySelector('.setup-pane:not([hidden]) .setup-employee')"),
+  );
+  const savedProduct = store.one(
+    "SELECT * FROM products WHERE name=?",
+    initialProduct,
+  );
+  assert.equal(savedProduct.quantity, 3000);
+  assert.equal(savedProduct.value, 3000);
+  await js("document.querySelector('.setup-back button').click()");
+  await wait(() => store.onboarding().step === 1);
+  await wait(() =>
+    js(
+      "!!document.querySelector('.setup-pane:not([hidden]) .setup-saved button:not(:disabled)')",
+    ),
+  );
+  await js(
+    "document.querySelector('.setup-pane:not([hidden]) .setup-saved button').click()",
+  );
+  await wait(() => store.onboarding().step === 2);
+  await wait(() =>
+    js("!!document.querySelector('.setup-pane:not([hidden]) .setup-employee')"),
+  );
+  assert.equal(
+    store.one("SELECT COUNT(*) n FROM products WHERE name=?", initialProduct).n,
+    1,
+  );
+  const initialEmployee = "setup-" + Date.now();
+  await js(
+    `document.querySelector('.setup-employee [name=username]').value=${JSON.stringify(initialEmployee)};document.querySelector('.setup-employee [name=password]').value='temporary-setup-password';document.querySelector('.setup-employee').requestSubmit();`,
+  );
+  await wait(() => store.onboarding().step === 3);
+  await wait(() =>
+    js("!!document.querySelector('.setup-pane:not([hidden]) .start-working')"),
+  );
+  await capture("test-results/setup-ready-v030.png");
+  assert.equal(store.onboarding().completed, false);
+  await js("document.querySelector('.start-working').click()");
+  await wait(() => store.onboarding().completed);
+  await wait(() => js("document.querySelectorAll('nav button').length>5"));
+  await reload();
+  await wait(() => js("document.querySelectorAll('nav button').length>5"));
+  assert.equal(await js("!!document.querySelector('.setup-container')"), false);
+  checks.push(
+    "React setup wizard: supplier -> product -> back -> employee -> ready -> start; saved data retained and wizard hidden after reload",
+  );
 
   await js("document.querySelector('.shift-shortcut').click()");
   await wait(() => js("!!document.querySelector('[role=dialog]')"));
@@ -91,10 +172,7 @@ module.exports = async ({ win, store, license, hub }) => {
     "Array.from(document.querySelectorAll('nav button')).find(b=>b.textContent==='المنتجات').click()",
   );
   await wait(() => js("!!document.querySelector('.product-form')"));
-  await fs.writeFile(
-    "test-results/products-v020.png",
-    (await win.webContents.capturePage()).toPNG(),
-  );
+  await capture("test-results/products-v020.png");
   const simpleName = "منتج مبسط " + Date.now();
   await js(
     `document.querySelector('.product-form [name=name]').value=${JSON.stringify(simpleName)};document.querySelector('.product-form [name=retail]').value='150';document.querySelector('.product-form [name=openingQuantity]').value='0';document.querySelector('.product-form').requestSubmit();`,
@@ -153,10 +231,7 @@ module.exports = async ({ win, store, license, hub }) => {
     `for(const [selector,value] of [['.purchase-lines input[aria-label="الكمية"]','100'],['.purchase-lines input[aria-label="إجمالي تكلفة السطر"]','10000'],['.purchase-form input[name=paid]','5000']]){var input=document.querySelector(selector);Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,value);input.dispatchEvent(new Event('input',{bubbles:true}));}`,
   );
   await delay(100);
-  await fs.writeFile(
-    "test-results/purchase-v020.png",
-    (await win.webContents.capturePage()).toPNG(),
-  );
+  await capture("test-results/purchase-v020.png");
   await js("document.querySelector('.purchase-form').requestSubmit()");
   await wait(
     () =>
@@ -271,18 +346,12 @@ module.exports = async ({ win, store, license, hub }) => {
   );
   await wait(() => js("document.documentElement.dir==='ltr'"));
   checks.push("English LTR toggle");
-  await fs.writeFile(
-    "test-results/pos.png",
-    (await win.webContents.capturePage()).toPNG(),
-  );
+  await capture("test-results/pos.png");
   await js(
     `Array.from(document.querySelectorAll('nav button')).find(b=>b.textContent==='Overview').click()`,
   );
   await delay(200);
-  await fs.writeFile(
-    "test-results/overview.png",
-    (await win.webContents.capturePage()).toPNG(),
-  );
+  await capture("test-results/overview.png");
   await fs.writeFile(
     "test-results/electron-smoke.json",
     JSON.stringify(

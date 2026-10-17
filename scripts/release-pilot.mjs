@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 const repo = "khaleddaidar012/daidar_flow",
-  tag = "v0.2.0-pilot";
+  tag = "v0.3.0-pilot";
 const remote = spawnSync("git", ["remote", "get-url", "origin"], {
   encoding: "utf8",
 }).stdout.trim();
@@ -56,14 +56,14 @@ async function api(url, options = {}) {
   if (!r.ok) throw new Error("GitHub API status " + r.status);
   return r.status === 204 ? null : r.json();
 }
-const installer = "release/Daidar Flow Pilot Setup 0.2.0.exe";
+const installer = "release/Daidar Flow Pilot Setup 0.3.0.exe";
 const size = (await stat(installer)).size;
 const digest = createHash("sha256")
   .update(await readFile(installer))
   .digest("hex");
 await writeFile(
   "release/SHA256SUMS.txt",
-  digest + "  Daidar Flow Pilot Setup 0.2.0.exe\n",
+  digest + "  Daidar Flow Pilot Setup 0.3.0.exe\n",
 );
 const lookup = await fetch(
   "https://api.github.com/repos/" + repo + "/releases/tags/" + tag,
@@ -78,10 +78,10 @@ else if (lookup.status === 404)
     body: JSON.stringify({
       tag_name: tag,
       target_commitish: sha,
-      name: "Daidar Flow 0.2.0 — Windows Pilot",
+      name: "Daidar Flow 0.3.0 — Windows Pilot",
       prerelease: true,
       body:
-        "نسخة تجريبية لمتجر عام، غير جاهزة للبيع. مثبت Windows x64 غير موقّع. التفعيل يتطلب محاكي التطوير المنفصل؛ لا بوابة هب تجارية متصلة.\n\n9 مجموعات اختبارات قواعد عمل وSQLite ناجحة، واختبار Electron للكاشير والباركود وF8 والمرتجع. الطباعة المادية وربط هب التجاري غير مختبرين.\n\nدليل التجربة: https://github.com/" +
+        "نسخة تجريبية لمتجر عام، غير جاهزة للبيع. مثبت Windows x64 غير موقّع. التفعيل يتطلب محاكي التطوير المنفصل؛ لا بوابة هب تجارية متصلة.\n\n11 مجموعة اختبارات قواعد عمل وSQLite ناجحة، واختبار Electron للكاشير والباركود وF8 والمرتجع. الطباعة المادية وربط هب التجاري غير مختبرين.\n\nدليل التجربة: https://github.com/" +
         repo +
         "/blob/" +
         sha +
@@ -99,7 +99,7 @@ if (process.argv.includes("--draft-failed")) {
     if (
       asset.state === "starter" &&
       (asset.name === installer.split("/").at(-1) ||
-        /^DaidarFlowPilot-0\.2\.0\.exe\.part[0-9]+$/.test(asset.name))
+        /^DaidarFlowPilot-0\.3\.0\.exe\.part[0-9]+$/.test(asset.name))
     )
       await api(
         "https://api.github.com/repos/" + repo + "/releases/assets/" + asset.id,
@@ -138,7 +138,7 @@ if (process.argv.includes("--parts")) {
     offset += 25 * 1024 * 1024, index++
   ) {
     const name =
-      "DaidarFlowPilot-0.2.0.exe.part" + String(index).padStart(3, "0");
+      "DaidarFlowPilot-0.3.0.exe.part" + String(index).padStart(3, "0");
     await writeFile(
       "release/" + name,
       data.subarray(offset, Math.min(data.length, offset + 25 * 1024 * 1024)),
@@ -147,7 +147,7 @@ if (process.argv.includes("--parts")) {
   }
   const assemble = [
     "$ErrorActionPreference='Stop'",
-    "$taskOutput=Join-Path $PSScriptRoot 'Daidar Flow Pilot Setup 0.2.0.exe'",
+    "$taskOutput=Join-Path $PSScriptRoot 'Daidar Flow Pilot Setup 0.3.0.exe'",
     "$taskParts=@(" + names.map((n) => "'" + n + "'").join(",") + ")",
     "foreach($taskName in $taskParts){if(-not(Test-Path -LiteralPath (Join-Path $PSScriptRoot $taskName))){throw ('Missing '+$taskName)}}",
     "$taskStream=[System.IO.File]::Open($taskOutput,[System.IO.FileMode]::CreateNew)",

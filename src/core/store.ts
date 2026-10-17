@@ -165,10 +165,67 @@ export class Store {
         license: this.license.status(),
         hasManager: !!this.one("SELECT id FROM users LIMIT 1"),
         session: this.session,
+        onboarding:
+          this.session?.role === "manager" ? this.onboarding() : undefined,
         business:
           this.one("SELECT value FROM settings WHERE key='business'")?.value ||
           "",
       };
+    if (command === "onboardingMove" || command === "onboardingComplete") {
+      this.auth("users");
+      return this.transaction(() => {
+        const current = this.onboarding();
+        if (current.completed) return current;
+        if (command === "onboardingComplete") {
+          if (
+            current.step !== 3 ||
+            !current.counts.suppliers ||
+            !current.counts.products ||
+            (!current.counts.employees && !current.managerOnly)
+          )
+            throw new Error("أكمل البيانات الأساسية أولًا");
+          const next = {
+            step: 3,
+            completed: true,
+            managerOnly: current.managerOnly,
+          };
+          this.run(
+            "INSERT INTO settings(key,value) VALUES('onboarding',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            JSON.stringify(next),
+          );
+          this.audit("onboarding-complete", "general");
+          return this.onboarding();
+        }
+        if (p.step === current.step) return current;
+        if (
+          p.expectedStep !== current.step ||
+          Math.abs(p.step - current.step) !== 1
+        )
+          throw new Error("تغيرت خطوة الإعداد. أعد المحاولة");
+        if (p.step > current.step) {
+          if (current.step === 0 && !current.counts.suppliers)
+            throw new Error("أضف موردًا واحدًا على الأقل");
+          if (current.step === 1 && !current.counts.products)
+            throw new Error("أضف منتجًا واحدًا على الأقل");
+          if (current.step === 2 && !current.counts.employees && !p.managerOnly)
+            throw new Error("أضف موظفًا أو اختر العمل بحساب المدير فقط");
+        }
+        const next = {
+          step: p.step,
+          completed: false,
+          managerOnly:
+            current.step === 2 && p.step === 3
+              ? p.managerOnly
+              : current.managerOnly,
+        };
+        this.run(
+          "INSERT INTO settings(key,value) VALUES('onboarding',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+          JSON.stringify(next),
+        );
+        this.audit("onboarding-step", String(p.step));
+        return this.onboarding();
+      });
+    }
     if (command === "setup") {
       this.license.require();
       const hashed = await this.passwordHash(p.password);
@@ -869,6 +926,26 @@ export class Store {
       this.audit("document-return", id);
       return { id, total, cost, refund, credit };
     });
+  }
+  onboarding() {
+    const saved = this.one("SELECT value FROM settings WHERE key='onboarding'");
+    const state = saved
+      ? JSON.parse(saved.value)
+      : { step: 0, completed: false, managerOnly: false };
+    return {
+      ...state,
+      counts: {
+        suppliers: Number(
+          this.one("SELECT COUNT(*) n FROM parties WHERE kind='supplier'")!.n,
+        ),
+        products: Number(this.one("SELECT COUNT(*) n FROM products")!.n),
+        employees: Number(
+          this.one(
+            "SELECT COUNT(*) n FROM users WHERE role IN ('cashier','stock')",
+          )!.n,
+        ),
+      },
+    };
   }
   exportData() {
     this.auth("export", false);

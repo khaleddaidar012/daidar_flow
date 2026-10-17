@@ -16,6 +16,14 @@ const item = z
   .strict();
 export const schemas = {
   notices: z.object({}).strict(),
+  onboardingMove: z
+    .object({
+      step: z.number().int().min(0).max(3),
+      expectedStep: z.number().int().min(0).max(3),
+      managerOnly: z.boolean().default(false),
+    })
+    .strict(),
+  onboardingComplete: z.object({}).strict(),
   bootstrap: z.object({}).strict(),
   activateStart: z.object({}).strict(),
   activatePoll: z.object({}).strict(),
