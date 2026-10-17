@@ -104,7 +104,13 @@ export function Products({ data, action, busy, t }: Props) {
                 "text",
                 edit.barcode,
               ],
-              ["category", t("التصنيف", "Category"), "text", edit.category],
+              [
+                "category",
+                t("التصنيف", "Category"),
+                "text",
+                edit.category,
+                false,
+              ],
               ["retail", t("تجزئة", "Retail"), "number", money(edit.retail)],
               [
                 "wholesale",

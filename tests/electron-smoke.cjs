@@ -12,7 +12,15 @@ module.exports = async ({ win, store, license, hub }) => {
     }
     throw new Error("UI wait timeout");
   };
-  const js = (source) => win.webContents.executeJavaScript(source);
+  const js = async (source) => {
+    try {
+      return await win.webContents.executeJavaScript(source);
+    } catch (e) {
+      throw new Error(
+        "Renderer test step: " + source.slice(0, 180) + " :: " + e.message,
+      );
+    }
+  };
   const invoke = async (command, payload = {}) => {
     const r = await js(
       "window.flow.invoke(" +
@@ -96,6 +104,26 @@ module.exports = async ({ win, store, license, hub }) => {
   );
   const simple = store.one("SELECT * FROM products WHERE name=?", simpleName);
   checks.push("three-field product form with optional barcode generated");
+  await wait(() =>
+    js(
+      `Array.from(document.querySelectorAll("main tbody tr")).some(r=>r.textContent.includes(${JSON.stringify(simpleName)}))`,
+    ),
+  );
+  await js(
+    `Array.from(document.querySelectorAll('main tbody tr')).find(r=>r.textContent.includes(${JSON.stringify(simpleName)})).querySelector('button').click()`,
+  );
+  await wait(() =>
+    js("!!document.querySelector('section.panel form input[name=barcode]')"),
+  );
+  const physicalBarcode = "000" + Date.now();
+  await js(
+    `document.querySelector('section.panel form input[name=barcode]').value=${JSON.stringify(physicalBarcode)};document.querySelector('section.panel form').requestSubmit();`,
+  );
+  await wait(() => store.product(simple.id).barcode === physicalBarcode);
+  checks.push(
+    "existing product barcode updated through React with leading zeros",
+  );
+
   await js(
     "Array.from(document.querySelectorAll('nav button')).find(b=>b.textContent==='المشتريات').click()",
   );
